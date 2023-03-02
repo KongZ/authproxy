@@ -1,4 +1,7 @@
-FROM golang:1.19-buster as builder
+FROM --platform=$BUILDPLATFORM golang:1.19-buster as builder
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+RUN echo "I am running on $BUILDPLATFORM, building for $TARGETPLATFORM"
 ARG VERSION
 ARG COMMIT_HASH
 ARG BUILD_DATE
