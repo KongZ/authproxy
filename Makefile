@@ -1,6 +1,6 @@
 # Project variables
 PACKAGE = github.com/KongZ/authproxy
-DOCKER_REGISTRY ?= ghcr.io/kongz
+DOCKER_REGISTRY ?= 534625442569.dkr.ecr.ap-southeast-1.amazonaws.com
 DOCKER_IMAGE = ${DOCKER_REGISTRY}/authproxy
 
 # Build variables
@@ -49,6 +49,7 @@ build-debug: build ## Build a binary with remote debugging capabilities
 docker: ## Build a Docker image
 	@echo "Building architecture ${BUILD_ARCH}"
 	docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} \
+		--platform $(BUILD_ARCH) \
 		--build-arg=VERSION=$(VERSION) \
 		--build-arg=COMMIT_HASH=$(COMMIT_HASH) \
 		--build-arg=BUILD_DATE=$(BUILD_DATE) \
@@ -68,7 +69,7 @@ docker-multi: ## Build a Docker image in multi-architect
 .PHONY: docker-multi-push
 docker-multi-push: BUILD_ARCH := $(strip $(BUILD_ARCH)),linux/arm64
 docker-multi-push: ## Build a Docker image in multi-architect and push to GCR
-	@docker login ghcr.io -u USERNAME -p $(CR_PAT)
+##	@docker login ghcr.io -u USERNAME -p $(CR_PAT)
 	@echo "Building architecture ${BUILD_ARCH}"
 	docker buildx build -t ${DOCKER_IMAGE}:${DOCKER_TAG} \
 		--push \

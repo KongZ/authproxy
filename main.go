@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -9,13 +10,17 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"golang.org/x/exp/slices"
 )
 
 var ErrUnauthorizedHeaders = errors.New("unauthorized headers")
+
+type AcceptedHeaders []struct {
+	Name   string   `json:"name"`
+	Values []string `json:"values"`
+}
 
 // NewProxy takes target host and creates a reverse proxy
 func NewProxy(targetHost string, acceptedHeaders map[string][]string) (*httputil.ReverseProxy, error) {
@@ -98,12 +103,13 @@ func ProxyRequestHandler(proxy *httputil.ReverseProxy) func(http.ResponseWriter,
 
 func createAcceptedHeader() map[string][]string {
 	headers := make(map[string][]string)
-	acceptedHeaders := os.Getenv("ACCEPTED_HEADERS") // seperate each value by \n ACCEPTED_HEADERS=NAME:VALUE1\nVALUE2
-	strs := strings.Split(acceptedHeaders, ":")
-	if len(strs) == 2 {
-		key := strings.TrimSpace(strs[0])
-		values := strings.Split(strings.TrimSpace(strs[1]), "\n")
-		headers[key] = values
+	acceptedHeadersJson := os.Getenv("ACCEPTED_HEADERS")
+	var acceptedHeaders AcceptedHeaders
+	if err := json.Unmarshal([]byte(acceptedHeadersJson), &acceptedHeaders); err != nil {
+		log.Printf("Invalid ACCEPTED_HEADERS [%v]", err)
+	}
+	for _, v := range acceptedHeaders {
+		headers[v.Name] = v.Values
 	}
 	return headers
 }
