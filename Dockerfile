@@ -1,7 +1,8 @@
 FROM --platform=$BUILDPLATFORM golang:1.19-buster as builder
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
-RUN echo "I am running on $BUILDPLATFORM, building for $TARGETPLATFORM"
+ARG TARGETOS
+ARG TARGETARCH
 ARG VERSION
 ARG COMMIT_HASH
 ARG BUILD_DATE
@@ -31,7 +32,7 @@ RUN CGO_ENABLED=0 staticcheck -f "stylish" ./...
 RUN gosec -fmt=text ./...
 
 # Build executable binary
-RUN CGO_ENABLED=0 go build -v -o /authproxy/main -ldflags="$LDFLAGS" .
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -v -o /authproxy/main -ldflags="$LDFLAGS" .
 
 ################################
 # Main image
