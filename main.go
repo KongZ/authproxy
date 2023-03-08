@@ -27,13 +27,15 @@ type AcceptedHeadersStruct []struct {
 }
 
 type DeniedPathsStruct []struct {
-	HeaderValue string   `yaml:"headerValue"`
+	Name        string   `yaml:"name"`
+	HeaderValue []string `yaml:"headerValue"`
 	Paths       []string `yaml:"paths"`
 }
 
 type transport struct {
 	http.RoundTripper
-	Host string
+	Host           string
+	HealthcheckUrl string
 }
 
 // NewProxy takes target host and creates a reverse proxy
@@ -42,37 +44,31 @@ func NewProxy(targetHost string) (*httputil.ReverseProxy, error) {
 	if err != nil {
 		return nil, err
 	}
-	targetUrl := os.Getenv("TARGET_URL")
-	u, err := url.Parse(targetUrl)
-	if err != nil {
-		return nil, errors.New("invalid target url")
-	}
 	proxy := httputil.NewSingleHostReverseProxy(url)
-	// originalDirector := proxy.Director
-	// proxy.Director = func(req *http.Request) {
-	// 	req.Host = u.Host
-	// 	originalDirector(req)
-	// 	err = modifyRequest(req, acceptedHeaders)
-	// }
+	targetHealth := os.Getenv("TARGET_HEALTHCHECK")
+	if targetHealth == "" {
+		targetHealth = "/"
+	}
 	skipCert, _ := strconv.ParseBool(os.Getenv("IGNORE_CERTIFICATE"))
 	proxy.Transport = &transport{
 		RoundTripper: &http.Transport{
 			// #nosec G402 allow
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: skipCert},
 		},
-		Host: u.Host,
+		Host:           url.Host,
+		HealthcheckUrl: targetHealth,
 	}
-
-	// proxy.Transport = &transport{}
-	// proxy.ModifyResponse = modifyResponse(err)
 	proxy.ErrorHandler = errorHandler()
 	return proxy, nil
 }
 
 func (t *transport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+	req.Host = t.Host
+	reqPath := req.URL.Path
 	// Debug
 	if Debug {
 		log.Println("[Request Headers]")
+		log.Printf("Path: %s", reqPath)
 		for name, values := range req.Header {
 			// Loop over all values for the name.
 			for _, value := range values {
@@ -80,7 +76,10 @@ func (t *transport) RoundTrip(req *http.Request) (resp *http.Response, err error
 			}
 		}
 	}
-	req.Host = t.Host
+	// skip validating for healthcheck
+	if t.HealthcheckUrl == reqPath {
+		return t.RoundTripper.RoundTrip(req)
+	}
 	var reqValue string
 	for key, values := range AcceptedHeaders {
 		reqValue = req.Header.Get(key)
@@ -95,7 +94,6 @@ func (t *transport) RoundTrip(req *http.Request) (resp *http.Response, err error
 		}
 	}
 	if deninedPaths, found := DeniedPaths[reqValue]; found {
-		reqPath := req.URL.Path
 		if Debug {
 			log.Printf("Requested path [%s]", reqPath)
 		}
@@ -123,46 +121,6 @@ func (t *transport) RoundTrip(req *http.Request) (resp *http.Response, err error
 	}
 	return t.RoundTripper.RoundTrip(req)
 }
-
-// func modifyRequest(req *http.Request, acceptedHeaders map[string][]string) error {
-// 	// // Debug
-// 	log.Println("[Request]")
-// 	for name, values := range req.Header {
-// 		// Loop over all values for the name.
-// 		for _, value := range values {
-// 			log.Printf("%s: %v", name, value)
-// 		}
-// 	}
-// 	for key, values := range acceptedHeaders {
-// 		reqValue := req.Header.Get(key)
-// 		log.Printf("R %s=%s", key, reqValue)
-// 		if !slices.Contains(values, reqValue) {
-// 			return ErrUnauthorizedHeaders
-// 		}
-// 	}
-// 	return nil
-// }
-
-// func modifyResponse(err error) func(*http.Response) error {
-// 	return func(resp *http.Response) error {
-// 		log.Printf("RES err=%v", err)
-// 		if err != nil {
-// 			if errors.Is(err, ErrUnauthorizedHeaders) {
-// 				resp.StatusCode = http.StatusForbidden
-// 			}
-// 		}
-// 		// Debug
-// 		log.Println("[Response]")
-// 		log.Printf("[Status=%d]", resp.StatusCode)
-// 		for name, values := range resp.Header {
-// 			// Loop over all values for the name.
-// 			for _, value := range values {
-// 				log.Printf("%s: %v", name, value)
-// 			}
-// 		}
-// 		return nil
-// 	}
-// }
 
 func errorHandler() func(http.ResponseWriter, *http.Request, error) {
 	return func(w http.ResponseWriter, req *http.Request, err error) {
@@ -196,9 +154,10 @@ func configure() {
 		log.Printf("Invalid DENIED_PATHS [%v]", err)
 	}
 	for _, v := range deniedPaths {
-		DeniedPaths[v.HeaderValue] = v.Paths
+		for _, i := range v.HeaderValue {
+			DeniedPaths[i] = append(DeniedPaths[i], v.Paths...)
+		}
 	}
-
 }
 
 func main() {
