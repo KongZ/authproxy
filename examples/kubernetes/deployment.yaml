@@ -28,7 +28,7 @@ spec:
           ports:
             - containerPort: 8080
               protocol: TCP
-          image: authproxy:latest
+          image: ghcr.io/kongz/authproxy:latest
           env:
             - name: AUDIT
               value: "true"
