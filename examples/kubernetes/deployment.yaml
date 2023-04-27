@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+  labels:
+    app: simpleapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: simpleapp
+  template:
+    metadata:
+      labels:
+        app: simpleapp
+    spec:
+      containers:
+        - name: simpleapp
+          ports:
+            - containerPort: 5601
+              protocol: TCP
+          image: simpleapp:latest
+          resources:
+            limits:
+              cpu: "1"
+              memory: 500Mi
+        - name: authproxy
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          image: authproxy:latest
+          env:
+            - name: AUDIT
+              value: "true"
+            - name: TARGET_URL
+              value: http://localhost:5601
+            - name: TARGET_HEALTHCHECK
+              value: /ping
+            - name: ACCEPTED_HEADERS
+              value: |
+                - name: X-AMZN-OIDC-IDENTITY
+                  values:
+                    - "113364102343434434343" # John
+                    - "432432432490890342343" # Doe
+            - name: DENIED_PATHS
+              value: |
+                - name: BlockDebugApi
+                  headerValue:
+                    - "432432432490890342343" # Doe
+                  paths:
+                    - "/api/debug"
+          resources:
+            limits:
+              cpu: "1"
+              memory: 100Mi
+      serviceAccount: simpleapp
+      serviceAccountName: simpleapp
+      terminationGracePeriodSeconds: 30
